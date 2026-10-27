@@ -60,6 +60,7 @@
             <div class="ticker" id="ticker"></div>
           </div>
           <svg id="tower-svg" viewBox="0 0 820 860" preserveAspectRatio="xMidYMid meet" aria-label="한국몰드 AI 오피스 건물"></svg>
+          <svg id="floor-svg" viewBox="110 20 880 720" preserveAspectRatio="xMidYMid meet" aria-label="층 내부 사무실" hidden></svg>
           <div class="floor-card" id="floor-card" hidden></div>
         </div>
         <div class="legend">
@@ -71,7 +72,7 @@
       <aside class="card chat">
         <div class="chat-head">
           <div class="logo-mark">HK</div>
-          <div><b>한국몰드 AI 오피스 단톡방</b><small>AI 직원 4명 · 실시간</small></div>
+          <div><b id="chat-title">한국몰드 AI 오피스 단톡방</b><small id="chat-sub">AI 직원 4명 · 실시간</small></div>
         </div>
         <div class="chat-tabs" id="chat-tabs">
           <button data-tab="talk" class="on">💬 단톡방</button>

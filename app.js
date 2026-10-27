@@ -281,11 +281,12 @@ const P = (x, y, z) => [CX + (x - y) * 0.866 * S, CY + (x + y) * 0.5 * S - z * S
 const pts = (...ps) => ps.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
 const poly = (ps, fill, extra = '') => `<polygon points="${pts(...ps)}" fill="${fill}" ${extra}/>`;
 
-function box(x, y, z, w, d, h, [top, left, right]) {
-  const a = P(x, y, z + h), b = P(x + w, y, z + h), c = P(x + w, y + d, z + h), e = P(x, y + d, z + h);
-  const f = P(x, y + d, z), g = P(x + w, y + d, z), k = P(x + w, y, z);
+const makeBox = Pf => (x, y, z, w, d, h, [top, left, right]) => {
+  const a = Pf(x, y, z + h), b = Pf(x + w, y, z + h), c = Pf(x + w, y + d, z + h), e = Pf(x, y + d, z + h);
+  const f = Pf(x, y + d, z), g = Pf(x + w, y + d, z), k = Pf(x + w, y, z);
   return poly([e, c, g, f], left) + poly([b, c, g, k], right) + poly([a, b, c, e], top);
-}
+};
+const box = makeBox(P);
 function isoCircle(cx, cy, z, r, fill, extra = '') {
   const ps = [];
   for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; ps.push(P(cx + r * Math.cos(a), cy + r * Math.sin(a), z)); }
@@ -383,7 +384,7 @@ function buildTower() {
     // 층 라벨
     const [lx, ly] = P(W, D * 0.55, z + 2.2);
     const label = `${t.floor}F ${t.name}`;
-    g += `<g class="floor-label" onclick="goFloor('${t.id}')" transform="translate(${lx + 10} ${ly})">
+    g += `<g class="floor-label" onclick="enterFloor('${t.id}')" transform="translate(${lx + 10} ${ly})">
       <rect x="0" y="-13" width="${label.length * 11 + 92}" height="26" rx="13" fill="#1b2230" stroke="rgba(255,255,255,.25)"/>
       <circle cx="14" cy="0" r="4" fill="${t.color}"/>
       <text x="24" y="4.5" font-size="12" font-weight="800" fill="#fff">${label}<tspan font-weight="500" font-size="10.5" fill="#c7d2e5">  들어가 보기 →</tspan></text></g>`;
@@ -402,11 +403,200 @@ function buildTower() {
 
   $('#tower-svg').innerHTML = bg + floors + `<g>${roof}</g>`;
 
-  $('#floor-chips').innerHTML = `<button class="fchip" data-floor="">전체 오피스</button>` +
+  $('#floor-chips').innerHTML = `<button class="fchip" data-floor="">🏢 전체 타워</button>` +
     TEAMS.map(t => `<button class="fchip" data-floor="${t.id}" style="--c:${t.color}"><i></i>${t.floor}F ${t.name}</button>`).join('');
   $('#floor-chips').addEventListener('click', e => {
     const b = e.target.closest('.fchip');
-    if (b) selectFloor(b.dataset.floor || null);
+    if (b) enterFloor(b.dataset.floor || null);
+  });
+}
+
+// ---------- 층 내부 사무실 (확대 아이소메트릭) ----------
+const FS = 34, FW = 16, FD = 11, FWALL = 5.6, FOX = 476, FOY = 250;
+const FP = (x, y, z) => [FOX + (x - y) * 0.866 * FS, FOY + (x + y) * 0.5 * FS - z * FS];
+const fbox = makeBox(FP);
+const onWallY = (x, z) => { const [X, Y] = FP(x, 0, z); return `matrix(0.866 0.5 0 1 ${X.toFixed(1)} ${Y.toFixed(1)})`; };
+const onWallX = (y, z) => { const [X, Y] = FP(0, y, z); return `matrix(-0.866 0.5 0 1 ${X.toFixed(1)} ${Y.toFixed(1)})`; };
+const fellipse = (cx, cy, z, rx, ry, fill, extra = '') => {
+  const ps = [];
+  for (let i = 0; i < 32; i++) { const a = (i / 32) * Math.PI * 2; ps.push(FP(cx + rx * Math.cos(a), cy + ry * Math.sin(a), z)); }
+  return poly(ps, fill, extra);
+};
+
+const WORKFLOW = {
+  admin: ['MANAGEMENT WORKFLOW', ['수집', '검토', '결재', '공유']],
+  dev: ['DEVELOPMENT WORKFLOW', ['사양 검토', '설계', '시사출', '수정']],
+  qc: ['QUALITY WORKFLOW', ['측정', '분석', '판정', '성적서']],
+  prod: ['PRODUCTION WORKFLOW', ['계획', '작업 지시', '생산', '출하']],
+};
+const FSPOTS = { work: [6.4, 5.0], meet: [4.2, 9.2], rest: [2.0, 3.2], guest: [6.6, 6.8] };
+const WHITE = ['#f3f5f9', '#a7b1c0', '#cbd2dc'];
+const DARK = ['#3b4352', '#262c37', '#30374430'];
+
+function cityPanel(width, rnd) {
+  const h = FWALL * FS;
+  let s = `<rect x="0" y="${-h}" width="${width}" height="${h}" fill="url(#fsky)"/>`;
+  let u = 0;
+  while (u < width) {
+    const bw = 18 + rnd() * 30, bh = 50 + rnd() * (h - 40);
+    s += `<rect x="${u}" y="${-bh}" width="${bw}" height="${bh}" fill="${rnd() < .5 ? '#0e1934' : '#13224a'}"/>`;
+    for (let wy = -bh + 6; wy < -4; wy += 8) for (let wx = u + 3; wx < u + bw - 3; wx += 6) {
+      const r = rnd();
+      if (r < .4) s += `<rect x="${wx}" y="${wy}" width="2.6" height="3.6" fill="${r < .15 ? '#ffd27a' : '#7eb0ff'}" opacity="${.4 + r}"/>`;
+    }
+    u += bw + 2;
+  }
+  for (let m = 0; m <= width; m += 46) s += `<rect x="${m}" y="${-h}" width="2.5" height="${h}" fill="#26324a"/>`;
+  return s + `<rect x="0" y="${-h}" width="${width}" height="5" fill="#26324a"/><rect x="0" y="-3" width="${width}" height="3" fill="#3d7bff"/>`;
+}
+
+function fplant(x, y) {
+  const [px, py] = FP(x + 0.35, y + 0.35, 1.6);
+  return fbox(x, y, 0, 0.7, 0.7, 0.7, ['#e5e7eb', '#9ca3af', '#c4c9d1']) +
+    `<circle cx="${px}" cy="${py + 6}" r="18" fill="#22804f"/><circle cx="${px - 9}" cy="${py}" r="12" fill="#2f9d63"/>
+     <circle cx="${px + 8}" cy="${py - 6}" r="11" fill="#3bb574"/><circle cx="${px}" cy="${py - 14}" r="9" fill="#46c17f"/>`;
+}
+const fchair = (x, y) => fbox(x, y, 0, 0.6, 0.6, 0.45, ['#e4e7ec', '#8a94a3', '#b3bbc6']) + fbox(x, y, 0.45, 0.6, 0.1, 0.55, ['#d7dbe2', '#7c8696', '#a2abb8']);
+const laptop = (x, y) => fbox(x, y, 0.76, 0.8, 0.5, 0.04, ['#c9ced6', '#8b93a0', '#a9b0bb']) +
+  fbox(x, y - 0.02, 0.8, 0.8, 0.06, 0.5, ['#333', '#4f8dff', '#22293a']);
+
+function fequip(t) {
+  const c = t.color;
+  if (t.equip === 'cabinet') return [0, 1, 2, 3].map(i => fbox(11.6 + i * 0.95, 0.3, 0, 0.85, 0.75, 1.9, ['#eef1f5', '#9aa5b5', '#c2cad6'])).join('') +
+    fbox(11.8, 0.4, 1.9, 0.5, 0.4, 0.3, [c, c, c]) + fbox(13.7, 0.4, 1.9, 0.6, 0.4, 0.25, ['#f6c453', '#d9a632', '#e8b742']);
+  if (t.equip === 'screen') return fbox(11.6, 0.4, 0, 1.5, 1.3, 2.4, ['#eef1f5', '#97a3b4', '#bdc6d3']) +
+    fbox(11.75, 0.5, 0.5, 1.2, 1.25, 1.5, ['#1d3157', '#1d3157', '#2b4a80']) + fbox(12.15, 0.8, 0.9, 0.4, 0.4, 0.4, [c, c, c]) +
+    fbox(13.6, 0.3, 0, 1.9, 0.7, 2.4, ['#dfe4ea', '#8592a6', '#aab5c4']) +
+    [0, 1, 2].map(i => fbox(13.8 + i * 0.55, 0.4, 0.8 + (i % 2) * 0.7, 0.4, 0.4, 0.35, ['#c8ced8', '#7d8899', '#a1abba'])).join('');
+  if (t.equip === 'cmm') return fbox(11.6, 0.5, 0, 3.4, 2, 0.95, ['#636b78', '#3a404b', '#4b525e']) +
+    fbox(11.8, 0.6, 0.95, 0.25, 0.25, 1.7, ['#e5e7eb', '#a3aab5', '#c3c9d1']) + fbox(14.5, 0.6, 0.95, 0.25, 0.25, 1.7, ['#e5e7eb', '#a3aab5', '#c3c9d1']) +
+    fbox(11.8, 0.6, 2.65, 2.95, 0.3, 0.3, [c, c, c]) + fbox(13.1, 0.6, 1.6, 0.2, 0.3, 1.05, ['#ddd', '#999', '#bbb']) +
+    fbox(12.8, 1.2, 0.95, 0.9, 0.7, 0.4, ['#9aa3b0', '#6b7482', '#808a98']);
+  return fbox(11.6, 0.3, 0, 3.8, 0.9, 2.4, ['#cfd5dd', '#7e8899', '#9ea8b7']) +
+    [0.25, 1.05, 1.85].map(z => [0, 1, 2, 3].map(i => fbox(11.75 + i * 0.92, 0.4, z, 0.7, 0.65, 0.45, [i % 2 ? c : '#9aa6b8', '#5d6878', '#77839a'])).join('')).join('');
+}
+
+function personSVG(t, id, withBubble, spot) {
+  const c = t.color, p = t.person;
+  const [sx, sy] = FP(...spot, 0);
+  return `<g class="fav" id="${id}" data-team="${t.id}" style="transform:translate(${sx}px,${sy}px)">
+    <ellipse rx="20" ry="8" fill="${c}" opacity=".3"/><ellipse class="fring" rx="20" ry="8" fill="none" stroke="#16a34a" stroke-width="2.5"/>
+    <g class="bob">
+      <rect x="-7" y="-26" width="6" height="26" rx="2" fill="#1e2533"/><rect x="1" y="-26" width="6" height="26" rx="2" fill="#1e2533"/>
+      <rect x="-12" y="-56" width="24" height="33" rx="9" fill="${c}"/>
+      <rect x="-16" y="-53" width="5" height="24" rx="2.5" fill="${c}" opacity=".85"/><rect x="11" y="-53" width="5" height="24" rx="2.5" fill="${c}" opacity=".85"/>
+      <path d="M-4 -56l4 7 4-7z" fill="#fff"/>
+      <circle cx="0" cy="-67" r="12" fill="#f6d2b3"/>
+      <path d="M-12 -69a12 12 0 0 1 24 0c-5-5-19-5-24 0z" fill="#2a2420"/>
+      <circle cx="-4" cy="-66" r="1.4" fill="#222"/><circle cx="4" cy="-66" r="1.4" fill="#222"/>
+    </g>
+    <g transform="translate(0 -98)">
+      <rect x="-62" y="-13" width="124" height="26" rx="13" fill="#141b2b" stroke="rgba(255,255,255,.3)"/>
+      <circle cx="-48" cy="0" r="9" fill="${c}"/><text x="-48" y="3" text-anchor="middle" font-size="7.5" font-weight="800" fill="#fff">${p.short}</text>
+      <text x="-35" y="4.5" font-size="12" font-weight="800" fill="#fff">${p.name}<tspan font-size="10" font-weight="500" fill="#c7d2e5"> ${t.name}</tspan></text>
+      <circle class="fdot" cx="52" cy="0" r="4" fill="#16a34a"/>
+    </g>
+    ${withBubble ? `<g class="fbubble" transform="translate(0 -130)"><rect y="-14" height="28" rx="14" fill="#fff"/><text y="4.5" text-anchor="middle" font-size="12" font-weight="600" fill="#1b2230"></text></g>` : ''}
+  </g>`;
+}
+
+function buildFloor(teamId) {
+  const t = byTeam[teamId];
+  let seed = t.floor * 97;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const [title, steps] = WORKFLOW[t.id];
+  let s = `<defs><linearGradient id="fsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#091228"/><stop offset="1" stop-color="#1a2f5e"/></linearGradient>
+    <radialGradient id="fbg" cx=".5" cy=".55" r=".7"><stop offset="0" stop-color="#141e38"/><stop offset="1" stop-color="#05080f"/></radialGradient>
+    <filter id="fglow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="4"/></filter></defs>
+    <rect width="1100" height="760" fill="url(#fbg)"/>`;
+
+  // 바닥 슬래브 + 네온 테두리
+  s += fbox(0, 0, -0.5, FW, FD, 0.5, ['#e3e8ef', '#141b2e', '#1b2440']);
+  for (let i = 2; i < FW; i += 2) { const [a, b] = [FP(i, 0, 0), FP(i, FD, 0)]; s += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#c9d1dc" stroke-width=".6"/>`; }
+  for (let i = 2; i < FD; i += 2) { const [a, b] = [FP(0, i, 0), FP(FW, i, 0)]; s += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#c9d1dc" stroke-width=".6"/>`; }
+  const edge = pts(FP(0, FD, -0.5), FP(FW, FD, -0.5), FP(FW, 0, -0.5));
+  s += `<polyline points="${edge}" fill="none" stroke="#3d7bff" stroke-width="7" filter="url(#fglow)"/><polyline points="${edge}" fill="none" stroke="#7fb0ff" stroke-width="2"/>`;
+
+  // 왼쪽 유리벽 (도시 야경)
+  s += `<g transform="${onWallX(0, 0)}">${cityPanel(FD * FS, rnd)}</g>`;
+  // 뒷벽: 유리 + 디스플레이 월 + 사인
+  s += `<g transform="${onWallY(0, 0)}">${cityPanel(3.4 * FS, rnd)}
+    <rect x="${3.4 * FS}" y="${-FWALL * FS}" width="${(FW - 3.4) * FS}" height="${FWALL * FS}" fill="#e6eaf0"/>
+    <rect x="${3.4 * FS}" y="${-FWALL * FS}" width="${(FW - 3.4) * FS}" height="6" fill="#cfd6e0"/>
+    <rect x="${3.4 * FS}" y="-3" width="${(FW - 3.4) * FS}" height="3" fill="#3d7bff"/>
+    <rect x="135" y="-168" width="215" height="104" rx="4" fill="#0b1631" stroke="#3d7bff" stroke-width="2"/>
+    <text x="242" y="-148" text-anchor="middle" font-size="10.5" font-weight="800" letter-spacing="1" fill="#fff">${title}</text>
+    ${steps.map((st, i) => `<circle class="wf-step" cx="${162 + i * 54}" cy="-112" r="14" fill="none" stroke="#6fb1ff" stroke-width="2"/>
+      <text x="${162 + i * 54}" y="-108" text-anchor="middle" font-size="10" font-weight="800" fill="#cfe2ff">${i + 1}</text>
+      <text x="${162 + i * 54}" y="-84" text-anchor="middle" font-size="9" fill="#cfe2ff">${st}</text>
+      ${i < 3 ? `<path d="M${180 + i * 54} -112h18" stroke="#6fb1ff" stroke-width="1.5" marker-end=""/>` : ''}`).join('')}
+    <text x="374" y="-140" font-size="17" font-weight="900" fill="#1f3fae" opacity=".25" filter="url(#fglow)">HANKOOK MOLD</text>
+    <text x="374" y="-140" font-size="17" font-weight="900" fill="#1f3fae">HANKOOK MOLD</text>
+    <text x="374" y="-118" font-size="14" font-weight="800" fill="${t.color}">${t.floor}F ${t.name}</text>
+    <rect x="374" y="-106" width="150" height="2" fill="${t.color}" opacity=".6"/></g>`;
+
+  // 가구 (뒤 → 앞 순서)
+  const items = [];
+  const add = (depth, svg) => items.push([depth, svg]);
+  // 팬트리
+  add(1.2, fbox(0.25, 0.2, 0, 1, 0.9, 2.7, ['#d4dbe4', '#2a3d5c', '#9fb0c7']));
+  add(3.0, fbox(0.25, 1.3, 0, 1, 3.4, 1.05, ['#f1f3f6', '#aab3c0', '#ccd3dd']) + fbox(0.45, 2.1, 1.05, 0.5, 0.5, 0.55, ['#2f3542', '#1f242e', '#292f3a']) +
+    fbox(0.5, 3.4, 1.05, 0.3, 0.3, 0.25, ['#fff', '#d6d9de', '#e6e8ec']) + fbox(0.5, 3.9, 1.05, 0.3, 0.3, 0.25, ['#fff', '#d6d9de', '#e6e8ec']));
+  // 팀 장비
+  add(12.5, fequip(t));
+  // 리더 데스크 (모니터 3대)
+  add(7.6, fbox(4.6, 3.0, 0, 3.6, 1.1, 0.78, WHITE) +
+    [0, 1, 2].map(i => fbox(4.8 + i * 1.1, 3.15, 0.78, 0.95, 0.08, 0.62, ['#333', i === 1 ? t.color : '#4f8dff', '#22293a'])).join(''));
+  add(9.1, fchair(6.1, 4.3));
+  // 업무 데스크 2열 × 3
+  [[9.2, 5.2], [11.4, 5.2], [13.6, 5.2], [9.2, 7.9], [11.4, 7.9], [13.6, 7.9]].forEach(([x, y]) => {
+    add(x + y + 0.5, fbox(x, y, 0, 1.9, 1.0, 0.76, WHITE) + laptop(x + 0.55, y + 0.25));
+    add(x + y + 1.9, fchair(x + 0.65, y + 1.2));
+  });
+  // 회의 테이블
+  const chairsAround = [[1.0, 6.3], [2.4, 5.6], [3.9, 5.6], [5.3, 6.6], [4.3, 8.6], [2.7, 8.9], [1.2, 8.2]];
+  chairsAround.filter(([x, y]) => y < 7.2).forEach(([x, y]) => add(x + y, fchair(x, y)));
+  add(10.4, fbox(3.05, 7.05, 0, 0.4, 0.4, 0.7, ['#9aa3b0', '#5f6876', '#7b8492']) +
+    fellipse(3.25, 7.25, 0.68, 2.5, 1.35, '#c8ced8') + fellipse(3.25, 7.25, 0.76, 2.5, 1.35, '#f7f8fa', 'stroke="#d5dae2"') +
+    fbox(3.0, 7.0, 0.76, 0.5, 0.35, 0.05, ['#1f2937', '#111', '#222']));
+  chairsAround.filter(([x, y]) => y >= 7.2).forEach(([x, y]) => add(x + y + 0.8, fchair(x, y)));
+  // 화분
+  [[0.4, 10.0], [15.1, 0.4], [15.1, 9.9], [9.0, 0.4]].forEach(([x, y]) => add(x + y + 0.3, fplant(x, y)));
+
+  items.sort((a, b) => a[0] - b[0]).forEach(([, svg]) => { s += svg; });
+  s += personSVG(byTeam.admin === t ? byTeam.dev : byTeam.admin, 'fav-guest', false, FSPOTS.guest).replace('class="fav"', 'class="fav" opacity="0"');
+  s += personSVG(t, 'fav-main', true, FSPOTS[t.person.status]);
+  $('#floor-svg').innerHTML = s;
+  $('#floor-svg').dataset.team = teamId;
+}
+
+function updateFloor() {
+  const t = byTeam[state.floor], p = t.person;
+  if ($('#floor-svg').dataset.team !== t.id) buildFloor(t.id);
+  const main = $('#fav-main'), guest = $('#fav-guest');
+  const [x, y] = FP(...FSPOTS[p.status], 0);
+  main.style.transform = `translate(${x}px,${y}px)`;
+  $('.fring', main).setAttribute('stroke', RING[p.status]);
+  $('.fdot', main).setAttribute('fill', RING[p.status]);
+  const label = `${EMO[p.status]} ${statusText(p)}`;
+  const b = $('.fbubble', main);
+  if ($('text', b).textContent !== label) {
+    $('text', b).textContent = label;
+    const w = Math.min(320, label.length * 12 + 28);
+    $('rect', b).setAttribute('x', -w / 2);
+    $('rect', b).setAttribute('width', w);
+  }
+  // 회의 상대가 이 층으로 방문
+  const meetingHere = p.status === 'meet' && p.withTeam;
+  if (meetingHere && guest.dataset.team !== p.withTeam) {
+    guest.outerHTML = personSVG(byTeam[p.withTeam], 'fav-guest', false, FSPOTS.guest).replace('class="fav"', 'class="fav" opacity="0"');
+  }
+  $('#fav-guest').setAttribute('opacity', meetingHere ? 1 : 0);
+  // 워크플로 진행 단계 표시
+  const step = p.status === 'work' ? Math.min(3, Math.floor(p.progress / 25)) : -1;
+  document.querySelectorAll('#floor-svg .wf-step').forEach((c, i) => {
+    c.setAttribute('fill', i < step ? 'rgba(111,177,255,.25)' : i === step ? t.color : 'none');
+    c.setAttribute('stroke', i === step ? '#fff' : '#6fb1ff');
   });
 }
 
@@ -422,15 +612,24 @@ function updateOffice() {
     $('.emo', el).textContent = EMO[t.person.status];
   });
   document.querySelectorAll('.fchip').forEach(b => b.classList.toggle('on', (b.dataset.floor || null) === state.floor));
-  document.querySelectorAll('.floor').forEach(g => g.classList.toggle('sel', g.dataset.team === state.floor));
-  $('#tower').classList.toggle('focus', !!state.floor);
   $('#ticker').innerHTML = `<b>지금</b>${esc(state.lastEvent || 'AI 직원 4명 근무 중')}`;
+  $('#tower-svg').toggleAttribute('hidden', !!state.floor);
+  $('#floor-svg').toggleAttribute('hidden', !state.floor);
+  $('#tower').classList.toggle('inside', !!state.floor);
 
   const card = $('#floor-card');
-  if (!state.floor) { card.hidden = true; return; }
+  if (!state.floor) {
+    card.hidden = true;
+    $('#chat-title').textContent = '한국몰드 AI 오피스 단톡방';
+    $('#chat-sub').textContent = 'AI 직원 4명 · 실시간';
+    return;
+  }
+  updateFloor();
   const t = byTeam[state.floor], p = t.person;
+  $('#chat-title').textContent = `${t.floor}F ${t.name}`;
+  $('#chat-sub').textContent = `${p.name} ${p.role} · 전체 단톡방 연결`;
   card.hidden = false;
-  card.innerHTML = `<button class="x" onclick="selectFloor(null)" aria-label="닫기">×</button>
+  card.innerHTML = `<button class="x" onclick="enterFloor(null)" aria-label="타워로 돌아가기">×</button>
     <h4><span class="floor-badge" style="--c:${t.color};background:${t.color}">${t.floor}F</span>${t.name}</h4>
     <div class="member" style="--c:${t.color}">${avatar(t)}<div><b>${p.name}</b> <span>${p.role} · ${STATUS[p.status]}</span></div></div>
     <p>${esc(statusText(p))}</p>
@@ -439,7 +638,7 @@ function updateOffice() {
     <ul class="done-list" style="margin-top:6px">${p.done.slice(-3).reverse().map(d => `<li>${esc(d.task)}</li>`).join('') || '<li style="list-style:none">아직 없음</li>'}</ul>`;
 }
 
-function selectFloor(id) { state.floor = id; updateOffice(); }
+function enterFloor(id) { state.floor = id; updateOffice(); }
 function goFloor(id) { state.floor = id; location.hash = '#/office'; if (state.route === 'office') updateOffice(); }
 
 // ---------- 단톡방 · 자료 · AI에게 묻기 ----------

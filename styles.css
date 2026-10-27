@@ -171,6 +171,12 @@ main { max-width: 1520px; margin: 0 auto; padding: 20px; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 640px;
 }
 .ticker b { margin-right: 8px; }
+.tower svg[hidden] { display: none; }
+.tower.inside { background: radial-gradient(circle at 50% 55%, #141e38, #05080f 70%); }
+.tower.inside .floor-card { right: auto; left: 14px; }
+.fav { transition: transform 2.2s ease-in-out, opacity .6s; }
+.fav[opacity="0"] { opacity: 0; }
+.fav .bob { animation: bob 2.4s ease-in-out infinite; }
 .floor-label { cursor: pointer; }
 .floor-label rect { transition: fill .2s; }
 .floor-label:hover rect { fill: #2a3550; }
@@ -269,4 +275,6 @@ dialog::backdrop { background: rgba(20, 20, 30, .4); }
   .teams { grid-template-columns: 1fr; }
   .hero { padding: 20px; }
   .ticker { display: none; }
+  .floor-card { padding: 12px; }
+  .floor-card .label, .floor-card .done-list { display: none; }
 }
